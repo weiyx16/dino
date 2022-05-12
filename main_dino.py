@@ -145,7 +145,7 @@ def train_dino(args):
     cudnn.benchmark = True
 
     # ============ wandb ============
-    if dist.get_rank == 0:
+    if dist.get_rank() == 0:
         wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
         run = wandb.init(
             id=args.tag,
@@ -161,7 +161,7 @@ def train_dino(args):
         args.local_crops_scale,
         args.local_crops_number,
     )
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -313,7 +313,7 @@ def train_dino(args):
             data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
             epoch, fp16_scaler, args)
 
-        if epoch % 10 == 0:
+        if False: #epoch % 10 == 0:
             knn_stats = knn_one_epoch(teacher, [data_loader_train, data_loader_val], [dataset_train, dataset_val], epoch, args)
         # ============ writing logs ... ============
         save_dict = {
