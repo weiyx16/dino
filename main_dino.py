@@ -144,6 +144,17 @@ def train_dino(args):
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
+    # ============ wandb ============
+    if dist.get_rank == 0:
+        wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
+        run = wandb.init(
+            id=args.tag,
+            name=args.tag,
+            entity='msravcg',
+            project='simmim_cond',
+            job_type='pretrain',
+            config=args,
+        )
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
         args.global_crops_scale,
@@ -641,14 +652,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
-    run = wandb.init(
-        id=args.tag,
-        name=args.tag,
-        entity='msravcg',
-        project='simmim_cond',
-        job_type='pretrain',
-        config=args,
-    )
 
     train_dino(args)
