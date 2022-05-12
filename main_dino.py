@@ -532,7 +532,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
         if it % 10 == 0:
-            log_message = dict(lr=optimizer.param_groups[0]["lr"], epoch=epoch, iter=it, loss=loss.item(), grad_norm=torch.norm(torch.stack(torch.tensor(param_norms))), loss_scale=fp16_scaler.get_scale())
+            log_message = dict(lr=optimizer.param_groups[0]["lr"], epoch=epoch, iter=it, loss=loss.item(), grad_norm=torch.norm(torch.tensor(param_norms)), loss_scale=fp16_scaler.get_scale())
             wandb_log(
                 data=log_message,
                 step=it,
