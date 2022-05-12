@@ -38,12 +38,18 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(torchvision_models.__dict__[name]))
 
+import wandb
+
+def wandb_log(*args, **kwargs):
+    if dist.get_rank() == 0:
+        wandb.log(*args, **kwargs)
+
 def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
+        choices=['vit_tiny', 'vit_small', 'vit_base', 'vit_large', 'xcit', 'deit_tiny', 'deit_small'] \
                 + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
         help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
@@ -117,6 +123,7 @@ def get_args_parser():
         Used for small local view cropping of multi-crop.""")
 
     # Misc
+    parser.add_argument("--tag", default="debug", type=str, help="job tag")
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
@@ -303,6 +310,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     fp16_scaler, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
+    num_steps = len(data_loader)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
@@ -354,6 +362,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
+        if (epoch * num_steps + it) % 10 == 0:
+            log_message = dict(lr=optimizer.param_groups[0]["lr"], epoch=epoch, iter=it, loss=loss.item(), grad_norm=param_norms, loss_scale=fp16_scaler.get_scale())
+            wandb_log(
+                data=log_message,
+                step=epoch * num_steps + it,
+            )
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -468,4 +483,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
+    run = wandb.init(
+        id=args.tag,
+        name=args.tag,
+        entity='msravcg',
+        project='simmim_cond',
+        job_type='pretrain',
+        config=args,
+    )
+
     train_dino(args)
