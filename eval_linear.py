@@ -71,6 +71,7 @@ def eval_linear(args):
     dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
     val_loader = torch.utils.data.DataLoader(
         dataset_val,
+        sampler=torch.utils.data.distributed.DistributedSampler(dataset_val),
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -192,6 +193,12 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+def reduce_tensor(tensor):
+    rt = tensor.clone()
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
+    rt /= dist.get_world_size()
+    return rt
+
 @torch.no_grad()
 def validate_network(val_loader, model, linear_classifier, n, avgpool):
     linear_classifier.eval()
@@ -219,7 +226,9 @@ def validate_network(val_loader, model, linear_classifier, n, avgpool):
             acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
         else:
             acc1, = utils.accuracy(output, target, topk=(1,))
-
+        acc1 = reduce_tensor(acc1)
+        acc5 = reduce_tensor(acc5)
+        loss = reduce_tensor(loss)
         batch_size = inp.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
